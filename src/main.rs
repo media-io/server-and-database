@@ -1,6 +1,7 @@
+mod post;
 mod user;
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::{
     http::StatusCode,
     routing::{get, post},
@@ -9,7 +10,10 @@ use axum::{
 use clap::Parser;
 use migration::{Migrator, MigratorTrait};
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, Database, DatabaseConnection, EntityTrait};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, Condition, Database, DatabaseConnection, EntityTrait,
+    QueryFilter,
+};
 use serde::{Deserialize, Serialize};
 use tower_http::trace::TraceLayer;
 
@@ -54,6 +58,8 @@ async fn main() -> std::io::Result<()> {
         .route("/", get(root))
         .route("/users", get(list_users))
         .route("/users", post(create_user))
+        .route("/users/:user_id/posts", get(list_posts))
+        .route("/users/:user_id/posts", post(create_post))
         .layer(TraceLayer::new_for_http())
         .with_state(database_connection);
 
@@ -81,7 +87,7 @@ async fn list_users(state: State<DatabaseConnection>) -> (StatusCode, Json<Vec<U
         })
         .collect();
 
-    (StatusCode::CREATED, Json(users))
+    (StatusCode::OK, Json(users))
 }
 
 async fn create_user(
@@ -102,6 +108,47 @@ async fn create_user(
     (StatusCode::CREATED, Json(user))
 }
 
+async fn list_posts(
+    state: State<DatabaseConnection>,
+    Path(user_id): Path<u32>,
+) -> (StatusCode, Json<Vec<Post>>) {
+    let posts: Vec<post::Model> = post::Entity::find()
+        .filter(Condition::any().add(post::Column::UserId.eq(user_id)))
+        .all(&state.0)
+        .await
+        .unwrap();
+
+    let posts = posts
+        .into_iter()
+        .map(|model_post| Post {
+            id: model_post.id as u64,
+            message: model_post.message,
+        })
+        .collect();
+
+    (StatusCode::OK, Json(posts))
+}
+
+async fn create_post(
+    state: State<DatabaseConnection>,
+    Path(user_id): Path<u32>,
+    Json(payload): Json<CreatePost>,
+) -> (StatusCode, Json<Post>) {
+    let model_post = post::ActiveModel {
+        message: Set(payload.message.to_string()),
+        user_id: Set(user_id as i32),
+        ..Default::default()
+    };
+    let model_post = model_post.insert(&state.0).await.unwrap();
+
+    let post = Post {
+        id: model_post.id as u64,
+        message: model_post.message,
+    };
+
+    (StatusCode::CREATED, Json(post))
+}
+
 #[derive(Deserialize)]
 struct CreateUser {
     username: String,
@@ -111,4 +158,15 @@ struct CreateUser {
 struct User {
     id: u64,
     username: String,
+}
+
+#[derive(Deserialize)]
+struct CreatePost {
+    message: String,
+}
+
+#[derive(Serialize)]
+struct Post {
+    id: u64,
+    message: String,
 }
