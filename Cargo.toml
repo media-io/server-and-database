@@ -1,0 +1,20 @@
+[package]
+name = "server-and-database"
+description = "Server with Database demo"
+version = "0.0.1"
+authors = [
+    "Marc-Antoine Arnaud <marc-antoine.arnaud@luminvent.com>",
+]
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+axum = "0.7"
+clap = { version = "4", features = ["derive"] }
+fern = "0.6"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tower-http = { version = "0.5", features = ["trace"] }
+tracing-subscriber = "0.3.18"
+serde = { version = "1.0.208", features = ["derive"] }
+humantime = "2.1.0"
+log = "0.4.22"
